@@ -14,6 +14,8 @@ sys.path.append(os.path.dirname(__file__))
 from env.trading_env import StockTradingEnv, Action, StockState, StepResult
 from graders.graders import run_all_graders
 print("[START]")
+from openai import OpenAI
+client = OpenAI()
 
 # Minimal OpenAI call (for requirement)
 try:
