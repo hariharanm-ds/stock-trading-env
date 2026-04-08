@@ -3,21 +3,23 @@ Stock Trading OpenEnv — FastAPI REST Server
 Endpoints mirror the OpenEnv step() / reset() / state() spec.
 """
 
+import sys
+import os
+import uuid
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
-import uuid
-import sys
-import os
 
-# Ensure local modules are discoverable
-sys.path.append(os.path.dirname(__file__))
+# --- CRITICAL PATH FIX ---
+# Since this file is in /server/app.py, we need to go up one level 
+# to find the /env and /graders folders.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from env.trading_env import StockTradingEnv, Action, StockState, StepResult
 from graders.graders import run_all_graders
 
-print("[START]")
+print("[START] Stock Trading Environment Loading...")
 
 app = FastAPI(
     title="Stock Trading OpenEnv",
@@ -84,7 +86,7 @@ def reset(req: Optional[ResetRequest] = None):
     """
     session_id = str(uuid.uuid4())
     
-    # Extract seed if request body exists, otherwise defaults to None (or 42)
+    # Extract seed if request body exists
     seed = req.seed if req else None
 
     env = StockTradingEnv(seed=seed)
@@ -165,3 +167,17 @@ def delete_session(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found.")
     del _sessions[session_id]
     return {"deleted": session_id}
+
+# ── VALIDATOR ENTRY POINTS ────────────────────────────────────────────────────
+
+def main():
+    """
+    The main() function requested by the OpenEnv validator for 
+    multi-mode deployment via [project.scripts].
+    """
+    import uvicorn
+    # Points to this specific file (server.app) and the 'app' object
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
+
+if __name__ == "__main__":
+    main()
