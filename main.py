@@ -61,10 +61,14 @@ def _get_env(session_id: str) -> StockTradingEnv:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@app.get("/", summary="Health check")
+@app.get("/")
 def root():
-    return {"status": "ok", "env": "StockTradingEnv", "version": "1.0.0"}
-
+    return {
+        "message": "Stock Trading OpenEnv is Live",
+        "docs": "/docs",
+        "available_tasks": ["easy", "medium", "hard"],
+        "action_space": "Discrete(3) + Continuous(1)"
+    }
 
 @app.post("/reset", response_model=ResetResponse, summary="Reset environment")
 def reset(req: ResetRequest):
