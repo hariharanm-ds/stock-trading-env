@@ -5,18 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stock-trading-env"
 version = "1.0.0"
-description = "A real-world stock trading OpenEnv environment for RL agents."
+description = "Stock trading OpenEnv"
 readme = "README.md"
-authors = [{ name = "Hariharan M", email = "hariharanm23ads@gmail.com" }]
-license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = [
     "fastapi",
     "uvicorn",
     "pydantic",
     "numpy",
-    "pandas"
+    "openenv-core>=0.2.0"
 ]
 
+[project.scripts]
+server = "server.app:main"
+
 [tool.setuptools]
-packages = ["env", "graders"]
+packages = ["env", "graders", "server"]
