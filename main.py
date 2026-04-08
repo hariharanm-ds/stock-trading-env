@@ -10,9 +10,13 @@ from typing import Optional
 import uuid
 import sys
 import os
+
+# Ensure local modules are discoverable
 sys.path.append(os.path.dirname(__file__))
+
 from env.trading_env import StockTradingEnv, Action, StockState, StepResult
 from graders.graders import run_all_graders
+
 print("[START]")
 
 app = FastAPI(
@@ -28,7 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory session store  {session_id: StockTradingEnv}
+# In-memory session store {session_id: StockTradingEnv}
 _sessions: dict[str, StockTradingEnv] = {}
 
 
@@ -61,25 +65,33 @@ def _get_env(session_id: str) -> StockTradingEnv:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@app.get("/")
+@app.get("/", summary="Health check")
 def root():
     return {
+        "status": "ok",
         "message": "Stock Trading OpenEnv is Live",
         "docs": "/docs",
         "available_tasks": ["easy", "medium", "hard"],
         "action_space": "Discrete(3) + Continuous(1)"
     }
 
+
 @app.post("/reset", response_model=ResetResponse, summary="Reset environment")
-def reset(req: ResetRequest):
+def reset(req: Optional[ResetRequest] = None):
     """
     Start a new episode. Returns a session_id and the initial state.
-    Pass `seed` for reproducibility.
+    Handles empty request bodies gracefully.
     """
     session_id = str(uuid.uuid4())
-    env = StockTradingEnv(seed=req.seed)
-    state = env.reset(seed=req.seed)
+    
+    # Extract seed if request body exists, otherwise defaults to None (or 42)
+    seed = req.seed if req else None
+
+    env = StockTradingEnv(seed=seed)
+    state = env.reset(seed=seed)
+    
     _sessions[session_id] = env
+    
     return ResetResponse(session_id=session_id, state=state)
 
 
@@ -93,6 +105,7 @@ def step(req: StepRequest):
     env = _get_env(req.session_id)
     if env.state().done:
         raise HTTPException(status_code=400, detail="Episode done. Call /reset to start a new one.")
+    
     action = Action(action=req.action, quantity=req.quantity)
     result = env.step(action)
     return result
