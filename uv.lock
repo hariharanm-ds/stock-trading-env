@@ -1,0 +1,40 @@
+version = 1
+revision = 1
+requires-python = ">=3.9"
+
+[[package]]
+name = "fastapi"
+version = "0.110.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "starlette" },
+]
+
+[[package]]
+name = "openenv-core"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "pydantic"
+version = "2.6.3"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "stock-trading-env"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "numpy" },
+    { name = "openenv-core" },
+    { name = "pandas" },
+    { name = "pydantic" },
+    { name = "uvicorn" },
+]
+
+[[package]]
+name = "uvicorn"
+version = "0.27.1"
+source = { registry = "https://pypi.org/simple" }
