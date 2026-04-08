@@ -1,4 +1,3 @@
-from main import app
 import gradio as gr
 from env import StockTradingEnv, Action
 import random
