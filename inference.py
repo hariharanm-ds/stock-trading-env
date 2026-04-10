@@ -1,95 +1,104 @@
 """
-Baseline Inference Script
-Runs three deterministic agent strategies and prints reproducible scores.
-Usage: python scripts/baseline_inference.py
+OpenEnv Inference Script - Phase 2 Compliant 
+Includes: LLM Proxy, Structured Logging, and Score Clamping.
 """
 
-import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import sys
+from openai import OpenAI
 
+# Ensure we can import your environment modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from env.trading_env import StockTradingEnv, Action
 
-SEEDS = [42, 123, 777]
+# 1. INITIALIZE THE CLIENT USING ENVIRONMENT VARIABLES
+# The validator automatically provides these when grading. Do NOT hardcode a key.
+client = OpenAI(
+    base_url=os.environ.get("API_BASE_URL", "https://api.openai.com/v1"),
+    api_key=os.environ.get("API_KEY", "dummy-key")
+)
+
+def llama_3_strategy(state) -> Action:
+    """
+    Sends the trading state to Llama 3 via the Hackathon proxy and gets a decision.
+    """
+    prompt = (
+        f"Context: Stock Trading.\n"
+        f"Price: {state.price:.2f}, Cash: {state.cash:.2f}, Shares: {state.shares_held}.\n"
+        f"Recent Prices: {state.price_history[-5:]}.\n"
+        f"Instruction: Should I BUY, SELL, or HOLD? Reply with only one word."
+    )
+
+    try:
+        # CALL THE API PROXY
+        response = client.chat.completions.create(
+            model="meta-llama/llama-3-70b-instruct",
+            messages=[
+                {"role": "system", "content": "You are a professional financial trading agent. Reply with a single word: BUY, SELL, or HOLD."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=5,
+            temperature=0.0 # Keeps the model's responses consistent
+        )
+        
+        decision = response.choices[0].message.content.strip().upper()
+        
+        # TRANSLATE TO ACTION
+        if "BUY" in decision and state.cash > state.price:
+            return Action(action=1, quantity=0.5)  # Buy with 50% of available capacity
+        elif "SELL" in decision and state.shares_held > 0:
+            return Action(action=2, quantity=1.0)  # Sell 100% of holdings
+            
+    except Exception as e:
+        # If the proxy times out or fails, log it to stderr and HOLD
+        print(f"Proxy Error: {e}", file=sys.stderr)
+    
+    # Default fallback is HOLD
+    return Action(action=0, quantity=0.0)
 
 
-def run_strategy(name: str, strategy_fn, seed: int) -> dict:
+def run_inference(seed: int):
+    # Task ID must not have spaces for the regex parser
+    task_id = f"llama3_trading_seed_{seed}"
+    
+    # REQUIRED [START] BLOCK
+    print(f"[START] task={task_id}", flush=True)
+
     env = StockTradingEnv(seed=seed)
     env.reset(seed=seed)
     done = False
-    total_reward = 0.0
     steps = 0
 
     while not done:
-        s = env.state()
-        action = strategy_fn(s)
+        state = env.state()
+        
+        # Get action from the LLM
+        action = llama_3_strategy(state)
+        
+        # Step the environment
         result = env.step(action)
-        total_reward += result.reward
-        done = result.done
+        
         steps += 1
+        done = result.done
+
+        # REQUIRED [STEP] BLOCK
+        print(f"[STEP] step={steps} reward={result.reward:.4f}", flush=True)
 
     final = env.state()
-    profit_pct = (final.net_worth - final.initial_capital) / final.initial_capital * 100
-    return {
-        "strategy": name,
-        "seed": seed,
-        "net_worth": final.net_worth,
-        "profit_pct": round(profit_pct, 2),
-        "total_reward": round(total_reward, 4),
-        "steps": steps,
-    }
+    
+    # --- THE NEW FIX: SCORE CLAMPING ---
+    # Calculate the raw score based on net worth vs initial capital
+    raw_score = final.net_worth / final.initial_capital
+    
+    # Squeeze the score so it is strictly > 0 and < 1 (e.g., 0.9999 instead of 1.0)
+    clamped_score = max(0.0001, min(0.9999, raw_score))
+    
+    # REQUIRED [END] BLOCK
+    print(f"[END] task={task_id} score={clamped_score:.4f} steps={steps} final_net_worth={final.net_worth:.2f}", flush=True)
 
-
-# ── Strategy definitions ──────────────────────────────────────────────────────
-
-def hold_strategy(state) -> Action:
-    """Never trade."""
-    return Action(action=0, quantity=0.0)
-
-
-def buy_and_hold_strategy(state) -> Action:
-    """Buy 80% at step 0, hold forever."""
-    if state.step == 0:
-        return Action(action=1, quantity=0.8)
-    return Action(action=0, quantity=0.0)
-
-
-def ma_crossover_strategy(state) -> Action:
-    """Short/long moving-average crossover."""
-    h = state.price_history
-    if len(h) < 5:
-        return Action(action=0, quantity=0.0)
-    short = sum(h[-3:]) / 3
-    long_ = sum(h) / len(h)
-    if short > long_ * 1.003 and state.cash > state.price:
-        return Action(action=1, quantity=0.25)
-    if short < long_ * 0.997 and state.shares_held > 0:
-        return Action(action=2, quantity=0.5)
-    return Action(action=0, quantity=0.0)
-
-
-strategies = [
-    ("Hold (baseline)",     hold_strategy),
-    ("Buy & Hold",          buy_and_hold_strategy),
-    ("MA Crossover",        ma_crossover_strategy),
-]
-
-
-# ── Run ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("=" * 65)
-    print(f"{'Strategy':<22} {'Seed':>6} {'Net Worth':>12} {'Profit%':>9} {'Reward':>10}")
-    print("=" * 65)
-
-    all_results = []
-    for name, fn in strategies:
-        for seed in SEEDS:
-            r = run_strategy(name, fn, seed)
-            all_results.append(r)
-            print(f"{r['strategy']:<22} {r['seed']:>6} {r['net_worth']:>12.2f} "
-                  f"{r['profit_pct']:>8.2f}% {r['total_reward']:>10.4f}")
-        print("-" * 65)
-
-    print("\nReproducibility check: run this script multiple times — scores must match.")
-    print("All strategies use fixed seeds for deterministic results.\n")
+    # The validator usually checks across multiple seeds for consistency
+    SEEDS = [42, 123, 777]
+    for s in SEEDS:
+        run_inference(s)
